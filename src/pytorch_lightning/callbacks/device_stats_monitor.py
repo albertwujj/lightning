@@ -60,8 +60,6 @@ class DeviceStatsMonitor(Callback):
         pl_module: "pl.LightningModule",
         stage: str,
     ) -> None:
-        if stage != "fit":
-            return
 
         if not trainer.loggers:
             raise MisconfigurationException("Cannot use `DeviceStatsMonitor` callback with `Trainer(logger=False)`.")
@@ -94,10 +92,16 @@ class DeviceStatsMonitor(Callback):
 
             device_stats.update(get_cpu_stats())
 
+        
+        if trainer.evaluating:
+            step = trainer._evaluation_loop.epoch_loop.batch_progress.total.completed
+        else:
+            step = trainer.fit_loop.epoch_loop._batches_that_stepped
+
         for logger in trainer.loggers:
             separator = logger.group_separator
             prefixed_device_stats = _prefix_metric_keys(device_stats, f"{self.__class__.__qualname__}.{key}", separator)
-            logger.log_metrics(prefixed_device_stats, step=trainer.fit_loop.epoch_loop._batches_that_stepped)
+            logger.log_metrics(prefixed_device_stats, step=step)
 
     def on_train_batch_start(
         self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", batch: Any, batch_idx: int
@@ -108,6 +112,17 @@ class DeviceStatsMonitor(Callback):
         self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: STEP_OUTPUT, batch: Any, batch_idx: int
     ) -> None:
         self._get_and_log_device_stats(trainer, "on_train_batch_end")
+
+    def on_test_batch_start(
+        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", batch: Any, batch_idx: int, dataloader_idx: int
+    ) -> None:
+        self._get_and_log_device_stats(trainer, "on_test_batch_start")
+
+    def on_test_batch_end(
+        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: STEP_OUTPUT, batch: Any, batch_idx: int, dataloader_idx: int
+    ) -> None:
+        self._get_and_log_device_stats(trainer, "on_test_batch_end")
+
 
 
 def _prefix_metric_keys(metrics_dict: Dict[str, float], prefix: str, separator: str) -> Dict[str, float]:

@@ -48,8 +48,12 @@ class LoggerConnector:
     @property
     def should_update_logs(self) -> bool:
         # `+ 1` because it can be checked before a step is executed, for example, in `on_train_batch_start`
-        should_log = (self.trainer.fit_loop.epoch_loop._batches_that_stepped + 1) % self.trainer.log_every_n_steps == 0
+        if self.trainer.evaluating:
+            should_log = (self.trainer._evaluation_loop.epoch_loop.batch_progress.total.completed + 1) % self.trainer.log_every_n_steps == 0
+        else:
+            should_log = (self.trainer.fit_loop.epoch_loop._batches_that_stepped + 1) % self.trainer.log_every_n_steps == 0
         return should_log or self.trainer.should_stop
+
 
     def configure_logger(self, logger: Union[bool, Logger, Iterable[Logger]]) -> None:
         if not logger:
